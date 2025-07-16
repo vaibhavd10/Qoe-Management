@@ -1,3 +1,4 @@
+# Multi-stage build for React frontend
 FROM node:18-alpine as builder
 
 # Set working directory
@@ -15,10 +16,10 @@ COPY . .
 # Build the application
 RUN npm run build
 
-# Production stage
+# Production stage with nginx
 FROM nginx:alpine
 
-# Copy built files from builder stage
+# Copy built files from builder stage (Vite outputs to dist)
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 # Copy nginx configuration

@@ -1,149 +1,91 @@
 version: '3.8'
 
 services:
-  # Database
   postgres:
     image: postgres:15
     environment:
       POSTGRES_DB: qoe_platform
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
 
-  # Redis for caching and Celery
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
 
-  # Backend API
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/qoe_platform
-      - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - JWT_SECRET_KEY=dev-secret-key-change-in-production
-      - API_HOST=0.0.0.0
-      - API_PORT=8000
-      - CORS_ORIGINS=http://localhost:3000
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY:-}
+    build: ./backend
     ports:
       - "8000:8000"
-    volumes:
-      - ./backend:/app
-      - upload_data:/app/uploads
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # Celery Worker
-  celery-worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/qoe_platform
-      - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY:-}
+      - REDIS_URL=redis://redis:6379
+      - SECRET_KEY=your-secret-key-here
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+      - OPENAI_API_KEY=your-openai-api-key
+    depends_on:
+      - postgres
+      - redis
     volumes:
       - ./backend:/app
-      - upload_data:/app/uploads
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    command: celery -A app.celery_app worker --loglevel=info
-    healthcheck:
-      test: ["CMD", "celery", "-A", "app.celery_app", "inspect", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      - uploads:/app/uploads
 
-  # Celery Beat (scheduler)
-  celery-beat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/qoe_platform
-      - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-    volumes:
-      - ./backend:/app
-      - upload_data:/app/uploads
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    command: celery -A app.celery_app beat --loglevel=info
-
-  # Frontend
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    environment:
-      - REACT_APP_API_URL=http://localhost:8000
-      - REACT_APP_WS_URL=ws://localhost:8000
+    build: ./frontend
     ports:
-      - "3000:3000"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
+      - "3000:80"
+    environment:
+      - VITE_API_URL=http://backend:8000
     depends_on:
       - backend
-    command: npm run dev
 
-  # Flower (Celery monitoring)
-  flower:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+  celery-worker:
+    build: ./backend
+    command: celery -A app.tasks.document_tasks worker --loglevel=info
     environment:
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/qoe_platform
+      - REDIS_URL=redis://redis:6379
+      - SECRET_KEY=your-secret-key-here
+      - OPENAI_API_KEY=your-openai-api-key
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./backend:/app
+      - uploads:/app/uploads
+
+  celery-beat:
+    build: ./backend
+    command: celery -A app.tasks.document_tasks beat --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/qoe_platform
+      - REDIS_URL=redis://redis:6379
+      - SECRET_KEY=your-secret-key-here
+      - OPENAI_API_KEY=your-openai-api-key
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./backend:/app
+
+  flower:
+    build: ./backend
+    command: celery -A app.tasks.document_tasks flower --port=5555
     ports:
       - "5555:5555"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/qoe_platform
+      - REDIS_URL=redis://redis:6379
+      - SECRET_KEY=your-secret-key-here
     depends_on:
-      redis:
-        condition: service_healthy
-    command: celery -A app.celery_app flower --port=5555
+      - redis
+    volumes:
+      - ./backend:/app
 
 volumes:
   postgres_data:
-  redis_data:
-  upload_data:
+  uploads:
