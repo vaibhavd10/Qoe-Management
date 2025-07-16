@@ -1,44 +1,39 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { authApi } from '../services/api'
-
-interface User {
-  id: number
-  email: string
-  full_name: string
-  role: 'admin' | 'analyst'
-  is_active: boolean
-  created_at: string
-}
+import { User } from '../types'
 
 interface AuthState {
   user: User | null
-  accessToken: string | null
-  refreshToken: string | null
+  token: string | null
   isLoading: boolean
   login: (email: string, password: string) => Promise<void>
   logout: () => void
   checkAuth: () => Promise<void>
-  refreshAccessToken: () => Promise<void>
+  refreshToken: () => Promise<void>
+  updateUser: (user: Partial<User>) => void
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
       user: null,
-      accessToken: null,
-      refreshToken: null,
+      token: null,
       isLoading: false,
 
       login: async (email: string, password: string) => {
         set({ isLoading: true })
         try {
           const response = await authApi.login(email, password)
-          set({
-            user: response.user,
-            accessToken: response.access_token,
-            refreshToken: response.refresh_token,
-            isLoading: false,
+          const { access_token, user } = response
+          
+          // Store token in localStorage
+          localStorage.setItem('token', access_token)
+          
+          set({ 
+            user, 
+            token: access_token, 
+            isLoading: false 
           })
         } catch (error) {
           set({ isLoading: false })
@@ -47,59 +42,53 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
-        set({
-          user: null,
-          accessToken: null,
-          refreshToken: null,
-          isLoading: false,
-        })
+        localStorage.removeItem('token')
+        set({ user: null, token: null, isLoading: false })
       },
 
       checkAuth: async () => {
-        const { accessToken, refreshToken } = get()
-        if (!accessToken || !refreshToken) {
+        const token = localStorage.getItem('token')
+        if (!token) {
+          set({ user: null, token: null, isLoading: false })
           return
         }
 
+        set({ isLoading: true })
         try {
-          const user = await authApi.getMe()
-          set({ user })
+          const user = await authApi.me()
+          set({ user, token, isLoading: false })
         } catch (error) {
-          // If getting user fails, try to refresh token
-          try {
-            await get().refreshAccessToken()
-            const user = await authApi.getMe()
-            set({ user })
-          } catch (refreshError) {
-            get().logout()
-          }
+          // Token is invalid
+          localStorage.removeItem('token')
+          set({ user: null, token: null, isLoading: false })
         }
       },
 
-      refreshAccessToken: async () => {
-        const { refreshToken } = get()
-        if (!refreshToken) {
-          throw new Error('No refresh token available')
-        }
-
+      refreshToken: async () => {
         try {
-          const response = await authApi.refreshToken(refreshToken)
-          set({
-            accessToken: response.access_token,
-            refreshToken: response.refresh_token,
-          })
+          const response = await authApi.refreshToken()
+          const { access_token } = response
+          
+          localStorage.setItem('token', access_token)
+          set({ token: access_token })
         } catch (error) {
           get().logout()
           throw error
         }
       },
+
+      updateUser: (updates: Partial<User>) => {
+        const currentUser = get().user
+        if (currentUser) {
+          set({ user: { ...currentUser, ...updates } })
+        }
+      }
     }),
     {
       name: 'auth-store',
-      partialize: (state) => ({
-        user: state.user,
-        accessToken: state.accessToken,
-        refreshToken: state.refreshToken,
+      partialize: (state) => ({ 
+        user: state.user, 
+        token: state.token 
       }),
     }
   )
