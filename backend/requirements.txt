@@ -1,0 +1,56 @@
+# Web Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# Database
+sqlalchemy==2.0.23
+alembic==1.13.1
+psycopg2-binary==2.9.9
+
+# Authentication & Security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.6
+
+# Background Tasks
+celery==5.3.4
+redis==5.0.1
+
+# AI/ML Libraries
+langchain==0.0.351
+langchain-openai==0.0.2
+langchain-community==0.0.6
+langgraph==0.0.21
+openai==1.7.1
+
+# Document Processing
+pandas==2.1.4
+openpyxl==3.1.2
+python-docx==1.1.0
+PyPDF2==3.0.1
+pdfplumber==0.10.0
+
+# Utilities
+python-dotenv==1.0.0
+pydantic==2.5.2
+pydantic-settings==2.1.0
+httpx==0.25.2
+aiofiles==23.2.1
+python-magic==0.4.27
+
+# Development & Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-mock==3.12.0
+black==23.11.0
+flake8==6.1.0
+isort==5.12.0
+
+# Monitoring & Logging
+structlog==23.2.0
+flower==2.0.1
+
+# Data Validation
+email-validator==2.1.0
+phonenumbers==8.13.26
